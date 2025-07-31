@@ -11,6 +11,7 @@
 #include <thread>
 #include <mutex>
 #include <glibmm/dispatcher.h>
+#include <memory>
 
 /**
  * @brief Function to run a shell command and capture its output.
@@ -53,6 +54,48 @@ struct Project {
 
 // Global variable to store the extraction target directory
 std::filesystem::path g_extraction_target_dir;
+
+// --- Cloning Status Window ---
+class CloningStatusWindow : public Gtk::Window {
+public:
+    struct RepoStatus {
+        std::string name;
+        Gtk::Label* label;
+    };
+    CloningStatusWindow(const std::vector<std::string>& repo_names)
+    : vbox(Gtk::ORIENTATION_VERTICAL) {
+        set_title("Cloning Projects...");
+        set_default_size(400, 300);
+        set_position(Gtk::WIN_POS_CENTER);
+        vbox.set_spacing(10);
+        vbox.set_margin_top(20);
+        vbox.set_margin_bottom(20);
+        vbox.set_margin_start(20);
+        vbox.set_margin_end(20);
+        add(vbox);
+        auto title = Gtk::make_managed<Gtk::Label>("<b>Cloning Repositories</b>");
+        title->set_use_markup(true);
+        title->set_halign(Gtk::ALIGN_CENTER);
+        vbox.pack_start(*title, Gtk::PACK_SHRINK);
+        for (const auto& name : repo_names) {
+            auto label = Gtk::make_managed<Gtk::Label>(name + ": <span foreground='blue'>Cloning...</span>");
+            label->set_use_markup(true);
+            label->set_halign(Gtk::ALIGN_START);
+            vbox.pack_start(*label, Gtk::PACK_SHRINK);
+            repo_status_.push_back({name, label});
+        }
+        show_all_children();
+    }
+    void set_status(size_t idx, bool success) {
+        if (idx >= repo_status_.size()) return;
+        std::string color = success ? "green" : "red";
+        std::string msg = success ? "Cloned" : "Failed";
+        repo_status_[idx].label->set_markup(repo_status_[idx].name + ": <span foreground='" + color + "'>" + msg + "</span>");
+    }
+private:
+    Gtk::Box vbox;
+    std::vector<RepoStatus> repo_status_;
+};
 
 class TempDirCleanup {
 public:
@@ -282,17 +325,17 @@ private:
             std::string executable_name = source_path.stem().string();
 
             std::string compile_command;
-            std::string run_command;
+            std::string run_cmd;
             std::filesystem::path executable_path;
 
             #ifdef _WIN32
                 executable_path = output_dir / (executable_name + ".exe");
                 compile_command = "g++ \"" + source_path.string() + "\" -o \"" + executable_path.string() + "\" -std=c++17 2>&1";
-                run_command = "\"" + executable_path.string() + "\" 2>&1";
+                run_cmd = "\"" + executable_path.string() + "\" 2>&1";
             #else // Linux and macOS
                 executable_path = output_dir / executable_name;
                 compile_command = "g++ \"" + source_path.string() + "\" -o \"" + executable_path.string() + "\" -std=c++17 2>&1";
-                run_command = "\"" + executable_path.string() + "\" 2>&1";
+                run_cmd = "\"" + executable_path.string() + "\" 2>&1";
             #endif
 
             append_to_output("Compiling C++ project: " + compile_command + "\n");
@@ -315,9 +358,9 @@ private:
 
             if (compile_result_code == 0) {
                 append_to_output("Compilation successful.\n");
-                append_to_output("Running C++ project: " + run_command + "\n");
+                append_to_output("Running C++ project: " + run_cmd + "\n");
 
-                FILE* pipe_run = popen(run_command.c_str(), "r");
+                FILE* pipe_run = popen(run_cmd.c_str(), "r");
                 if (!pipe_run) {
                     append_to_error("Error: Could not execute run command.\n");
                     return;
@@ -358,41 +401,12 @@ private:
 int main(int argc, char* argv[]) {
     // Determine the system's temporary directory
     std::filesystem::path base_temp_dir = std::filesystem::temp_directory_path();
-    
-    // Create a unique subdirectory for this application's extraction within the temp dir
-    // Using current time as a part of the unique name is a common simple approach
     std::string unique_subdir_name = "BareBonesApp_Projects_" + std::to_string(std::chrono::duration_cast<std::chrono::milliseconds>(
                                         std::chrono::system_clock::now().time_since_epoch()).count());
     g_extraction_target_dir = base_temp_dir / unique_subdir_name;
-
-    // Create a cleanup object. Its destructor will be called when main exits.
     TempDirCleanup cleanup_on_exit(g_extraction_target_dir);
 
-    // --- Clone HTML projects from GitHub immediately ---
-    struct HtmlRepo {
-        std::string repo_url;
-        std::string local_dir;
-    };
-    std::vector<HtmlRepo> html_repos = {
-        {"https://github.com/IEatBricks129/kerdle.git", "Projects/html/kerdle"},
-        {"https://github.com/IEatBricks129/ACEDetail.git", "Projects/html/ACEDetail"},
-        {"https://github.com/IEatBricks129/IEatBricks.git", "Projects/html/IEatBricks"}
-    };
-    if (!std::filesystem::exists(g_extraction_target_dir)) {
-        std::filesystem::create_directories(g_extraction_target_dir);
-    }
-    for (const auto& repo : html_repos) {
-        std::filesystem::path repo_target_dir = g_extraction_target_dir / repo.local_dir;
-        std::string clone_cmd = "git clone --depth 1 " + repo.repo_url + " \"" + repo_target_dir.string() + "\"";
-        std::cout << "Cloning " << repo.repo_url << " into " << repo_target_dir << std::endl;
-        int clone_result = std::system(clone_cmd.c_str());
-        if (clone_result != 0) {
-            std::cerr << "Error cloning repo: " << repo.repo_url << " (code " << clone_result << ")" << std::endl;
-            // Optionally, exit or continue
-        }
-    }
-
-    // List of project repositories to clone (was projects.txt)
+    // List of project repositories to clone
     struct ProjectRepo {
         std::string repo_url;
         std::string local_dir;
@@ -403,12 +417,35 @@ int main(int argc, char* argv[]) {
         {"https://github.com/IEatBricks129/IEatBricks.git", "html/IEatBricks"}
     };
 
-    std::vector<Project> projects;
+    // Prepare repo names for status window
+    std::vector<std::string> repo_names;
     for (const auto& repo : project_repos) {
+        auto pos = repo.local_dir.find_last_of("/");
+        std::string name = (pos != std::string::npos) ? repo.local_dir.substr(pos+1) : repo.local_dir;
+        repo_names.push_back(name);
+    }
+
+    // Create Gtk::Application
+    auto app = Gtk::Application::create(argc, argv, "com.example.barebonesapp");
+
+    // Create and show cloning status window
+    auto cloning_window = std::make_unique<CloningStatusWindow>(repo_names);
+    cloning_window->show();
+    while (Gtk::Main::events_pending()) Gtk::Main::iteration();
+
+    if (!std::filesystem::exists(g_extraction_target_dir)) {
+        std::filesystem::create_directories(g_extraction_target_dir);
+    }
+
+    std::vector<Project> projects;
+    for (size_t i = 0; i < project_repos.size(); ++i) {
+        const auto& repo = project_repos[i];
         std::filesystem::path repo_target_dir = g_extraction_target_dir / repo.local_dir;
         std::string clone_cmd = "git clone --depth 1 " + repo.repo_url + " \"" + repo_target_dir.string() + "\"";
         std::cout << "Cloning " << repo.repo_url << " into " << repo_target_dir << std::endl;
         int clone_result = std::system(clone_cmd.c_str());
+        cloning_window->set_status(i, clone_result == 0);
+        while (Gtk::Main::events_pending()) Gtk::Main::iteration();
         if (clone_result != 0) {
             std::cerr << "Error cloning repo: " << repo.repo_url << " (code " << clone_result << ")" << std::endl;
             continue;
@@ -441,16 +478,12 @@ int main(int argc, char* argv[]) {
         }
     }
 
-    // Create a Gtk::Application instance. This is essential for any Gtkmm application.
-    auto app = Gtk::Application::create(argc, argv, "com.example.barebonesapp");
+    // Close cloning status window
+    cloning_window->hide();
+    while (Gtk::Main::events_pending()) Gtk::Main::iteration();
 
-    // Create an instance of your main window, passing the projects to it.
+    // Show main window
     MainWindow window(projects);
-
     int result = app->run(window);
-    return result;
-    // The TempDirCleanup object's destructor will be called here
-    // to remove the temporary directory.
-
     return result;
 }
