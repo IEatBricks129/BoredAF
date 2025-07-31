@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ACE Detail</title>
+    <link rel="stylesheet" href="style.css">
+
+    <!-- Google Fonts & Font Awesome -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+</head>
+<body>
+
+    <header class="hero">
+        <nav>
+            <div class="container nav-container">
+                <a href="#" class="nav-logo">Kylie Berringer</a>
+                <ul class="nav-links" id="nav-links">
+                    <li><a href="#about">About</a></li>
+                    <li><a href="#services">Services</a></li>
+                    <li><a href="#portfolio">Portfolio</a></li>
+                    <li><a href="#contact">Contact</a></li>
+                </ul>
+                <!-- Hamburger Menu Button for Mobile -->
+                <button class="nav-toggle" id="nav-toggle" aria-label="Open navigation">
+                    <i class="fas fa-bars"></i>
+                </button>
+            </div>
+        </nav>
+        <div class="container hero-content">
+            <!-- This h1 will be dynamically filled by the script to create 3D text -->
+            <h1 id="animated-name" class="hero-title" aria-label="ACE Detail"></h1>
+            <p class="hero-subtitle">Kylie Berringer</p>
+        </div>
+    </header>
+
+    <main>
+        <section id="about" class="container">
+            <h2>About Me</h2>
+            <p>
+                With a lifelong passion for automotive excellence, I founded ACE Detail to provide meticulous, high-quality vehicle care. My goal is to restore the beauty and value of every car I service, treating each one as if it were my own.
+            </p>
+        </section>
+
+        <section id="services">
+            <div class="container">
+                <h2>What I Do</h2>
+                <div class="service-cards">
+                    <div class="card">
+                        <i class="fas fa-car-side card-icon"></i>
+                        <h3>Exterior Polish & Wax</h3>
+                        <p>A multi-stage process to remove imperfections, restore shine, and protect your paint.</p>
+                    </div>
+                    <div class="card">
+                        <i class="fas fa-couch card-icon"></i>
+                        <h3>Interior Deep Clean</h3>
+                        <p>Complete interior rejuvenation, including shampooing, steam cleaning, and conditioning.</p>
+                    </div>
+                    <div class="card">
+                        <i class="fas fa-gem card-icon"></i>
+                        <h3>Ceramic Coating</h3>
+                        <p>The ultimate long-term protection, providing a durable, hydrophobic, and glossy finish.</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section id="portfolio">
+            <div class="container">
+                <h2>My Work</h2>
+                <div class="portfolio-cards">
+                    <div class="portfolio-card">
+                        <img src="https://placehold.co/600x400/007bff/ffffff?text=Sedan+Restoration" alt="A placeholder image for a sedan restoration project">
+                        <div class="portfolio-info">
+                            <h3>Sedan Restoration</h3>
+                            <p>Full paint correction and ceramic coating on a classic sedan.</p>
+                        </div>
+                    </div>
+                    <div class="portfolio-card">
+                        <img src="https://placehold.co/600x400/007bff/ffffff?text=SUV+Interior" alt="A placeholder image for an SUV interior cleaning project">
+                        <div class="portfolio-info">
+                            <h3>SUV Interior Detail</h3>
+                            <p>Complete interior deep clean for a family SUV.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section id="contact" class="container">
+            <h2>Get In Touch</h2>
+            <p>Ready to give your car the attention it deserves? Contact me for a quote.</p>
+            <div class="contact-links">
+                <a href="mailto:kylie@acedetail.com" class="contact-button">
+                    <i class="fas fa-envelope"></i> Email Me
+                </a>
+                <a href="#" class="social-link" aria-label="Instagram">
+                    <i class="fab fa-instagram"></i>
+                </a>
+                <a href="#" class="social-link" aria-label="Facebook">
+                    <i class="fab fa-facebook"></i>
+                </a>
+            </div>
+        </section>
+    </main>
+
+    <footer>
+        <div class="container">
+            <p>&copy; 2025 ACE Detail. All Rights Reserved.</p>
+        </div>
+    </footer>
+
+    <script src="script.js"></script>
+</body>
+</html>
