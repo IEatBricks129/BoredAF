@@ -403,33 +403,93 @@ int main(int argc, char* argv[]) {
     // Create a cleanup object. Its destructor will be called when main exits.
     TempDirCleanup cleanup_on_exit(g_extraction_target_dir);
 
+    // --- Clone HTML projects from GitHub immediately ---
+    struct HtmlRepo {
+        std::string repo_url;
+        std::string local_dir;
+    };
+    std::vector<HtmlRepo> html_repos = {
+        {"https://github.com/IEatBricks129/kerdle.git", "Projects/html/kerdle"},
+        {"https://github.com/IEatBricks129/ACEDetail.git", "Projects/html/ACEDetail"},
+        {"https://github.com/IEatBricks129/IEatBricks.git", "Projects/html/IEatBricks"}
+    };
+    if (!std::filesystem::exists(g_extraction_target_dir)) {
+        std::filesystem::create_directories(g_extraction_target_dir);
+    }
+    for (const auto& repo : html_repos) {
+        std::filesystem::path repo_target_dir = g_extraction_target_dir / repo.local_dir;
+        std::string clone_cmd = "git clone --depth 1 " + repo.repo_url + " \"" + repo_target_dir.string() + "\"";
+        std::cout << "Cloning " << repo.repo_url << " into " << repo_target_dir << std::endl;
+        int clone_result = std::system(clone_cmd.c_str());
+        if (clone_result != 0) {
+            std::cerr << "Error cloning repo: " << repo.repo_url << " (code " << clone_result << ")" << std::endl;
+            // Optionally, exit or continue
+        }
+    }
+
     // Extract the embedded projects
     if (!extract_embedded_projects(g_extraction_target_dir)) {
         std::cerr << "Failed to extract embedded projects. Exiting." << std::endl;
         return 1; // Indicate error
     }
 
+    // List of project repositories to clone (was projects.txt)
+    struct ProjectRepo {
+        std::string repo_url;
+        std::string local_dir;
+    };
+    std::vector<ProjectRepo> project_repos = {
+        {"https://github.com/IEatBricks129/kerdle.git", "Projects/html/kerdle"},
+        {"https://github.com/IEatBricks129/ACEDetail.git", "Projects/html/ACEDetail"},
+        {"https://github.com/IEatBricks129/IEatBricks.git", "Projects/html/IEatBricks"}
+    };
+
+    std::vector<Project> projects;
+    for (const auto& repo : project_repos) {
+        std::filesystem::path repo_target_dir = g_extraction_target_dir / repo.local_dir;
+        std::string clone_cmd = "git clone --depth 1 " + repo.repo_url + " \"" + repo_target_dir.string() + "\"";
+        std::cout << "Cloning " << repo.repo_url << " into " << repo_target_dir << std::endl;
+        int clone_result = std::system(clone_cmd.c_str());
+        if (clone_result != 0) {
+            std::cerr << "Error cloning repo: " << repo.repo_url << " (code " << clone_result << ")" << std::endl;
+            continue;
+        }
+        // Detect project type and main file
+        std::string type, main_file, name;
+        if (repo.local_dir.find("html/") != std::string::npos) {
+            type = "HTML";
+            main_file = (repo_target_dir / "index.html").string();
+            auto pos = repo.local_dir.find_last_of("/");
+            name = (pos != std::string::npos) ? repo.local_dir.substr(pos+1) : repo.local_dir;
+            if (name == "ACEDetail") name = "Ace Detail (HTML)";
+            else if (name == "IEatBricks") name = "My Portfolio Site (HTML)";
+            else if (name == "kerdle") name = "Kerdle :) (HTML)";
+            else name += " (HTML)";
+        } else if (repo.local_dir.find("cpp/") != std::string::npos) {
+            type = "C++";
+            for (const auto& entry : std::filesystem::recursive_directory_iterator(repo_target_dir)) {
+                if (entry.path().extension() == ".cpp") {
+                    main_file = entry.path().string();
+                    break;
+                }
+            }
+            auto pos = repo.local_dir.find_last_of("/");
+            name = (pos != std::string::npos) ? repo.local_dir.substr(pos+1) : repo.local_dir;
+            name += " (C++)";
+        }
+        if (!main_file.empty()) {
+            projects.push_back({name, type, main_file});
+        }
+    }
+
     // Create a Gtk::Application instance. This is essential for any Gtkmm application.
     auto app = Gtk::Application::create(argc, argv, "com.example.barebonesapp");
-
-    // Define projects with their paths *after* extraction
-    // These paths are relative to the g_extraction_target_dir
-    std::vector<Project> projects = {
-        {"Hello World (C++)", "C++", (g_extraction_target_dir / "Projects/cpp/hello_world/hello_world.cpp").string()},
-        {"Simple Calculator (C++)", "C++", (g_extraction_target_dir / "Projects/cpp/calculator/calculator_app.cpp").string()},
-        {"Another C++ App (C++)", "C++", (g_extraction_target_dir / "Projects/cpp/another_cpp_app/another_cpp_app.cpp").string()},
-        {"Ace Detail (HTML)", "HTML", (g_extraction_target_dir / "Projects/html/ACEDetail/index.html").string()},
-        {"My Portfolio Site (HTML)", "HTML", (g_extraction_target_dir / "Projects/html/IEatBricks/index.html").string()},
-        {"Kerdle :) (HTML)", "HTML", (g_extraction_target_dir / "Projects/html/kerdle/index.html").string()}
-    };
 
     // Create an instance of your main window, passing the projects to it.
     MainWindow window(projects);
 
-    // Run the application. This enters the Gtkmm main loop.
-    // The application will remain open until the window is closed.
     int result = app->run(window);
-
+    return result;
     // The TempDirCleanup object's destructor will be called here
     // to remove the temporary directory.
 
