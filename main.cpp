@@ -8,14 +8,41 @@
 #include <cstdlib>    // For std::system
 #include <cstdio>     // For popen, pclose (Unix-like)
 #include <chrono>     // For unique directory name
+#include <thread>
+#include <mutex>
+#include <glibmm/dispatcher.h>
 
-// Platform-specific includes for popen/pclose
-#ifdef _WIN32
-#define popen _popen
-#define pclose _pclose
-#endif
+/**
+ * @brief Function to run a shell command and capture its output.
+ * @param command The command to run.
+ * @return The output of the command.
+ */
+std::string run_command(const std::string& command) {
+    std::string result;
+    FILE* pipe = popen(command.c_str(), "r");
+    if (!pipe) {
+        throw std::runtime_error("popen() failed!");
+    }
+    char buffer[128];
+    while (fgets(buffer, sizeof(buffer), pipe) != nullptr) {
+        result += buffer;
+    }
+    pclose(pipe);
+    return result;
+}
 
-#include "embedded_data.h" // Include the auto-generated data header
+/**
+ * @brief Function to clone a Git repository.
+ * @param repo_url The URL of the repository.
+ * @param local_dir The local directory to clone into.
+ * @return True if the clone was successful, false otherwise.
+ */
+bool clone_repository(const std::string& repo_url, const std::string& local_dir) {
+    std::string command = "git clone --depth 1 " + repo_url + " \"" + local_dir + "\"";
+    std::cout << "Cloning " << repo_url << " into " << local_dir << std::endl;
+    int result = std::system(command.c_str());
+    return result == 0;
+}
 
 // Structure to hold project details
 struct Project {
@@ -25,85 +52,25 @@ struct Project {
 };
 
 // Global variable to store the extraction target directory
-// This is used by the launch_project function and for cleanup
 std::filesystem::path g_extraction_target_dir;
 
-// RAII helper to ensure temporary directory is removed when it goes out of scope
 class TempDirCleanup {
 public:
     TempDirCleanup(const std::filesystem::path& path_to_clean)
         : path_to_clean_(path_to_clean) {}
-
-    // Destructor will be called when the object goes out of scope
     ~TempDirCleanup() {
         if (std::filesystem::exists(path_to_clean_)) {
             std::cout << "Cleaning up temporary directory: " << path_to_clean_ << std::endl;
-            std::error_code ec; // For non-throwing remove_all
+            std::error_code ec;
             std::filesystem::remove_all(path_to_clean_, ec);
             if (ec) {
                 std::cerr << "Error cleaning up temporary directory: " << ec.message() << std::endl;
             }
         }
     }
-
 private:
     std::filesystem::path path_to_clean_;
 };
-
-
-/**
- * @brief Function to extract embedded files.
- * @param target_dir The directory where files should be extracted.
- * @return True if extraction is successful, false otherwise.
- */
-bool extract_embedded_projects(const std::filesystem::path& target_dir) {
-    std::cout << "Attempting to extract projects to: " << target_dir << std::endl;
-    try {
-        // Create the base target directory first
-        if (!std::filesystem::exists(target_dir)) {
-            std::filesystem::create_directories(target_dir);
-            std::cout << "Created base temporary directory: " << target_dir << std::endl;
-        }
-
-        // Create directories within the target_dir
-        for (const auto& dir_path_str : EmbeddedData::embedded_directories) {
-            std::filesystem::path full_dir_path = target_dir / dir_path_str;
-            if (!std::filesystem::exists(full_dir_path)) {
-                std::filesystem::create_directories(full_dir_path);
-                // std::cout << "Created directory: " << full_dir_path << std::endl; // Commented out for less verbose console output
-            }
-        }
-
-        // Write files
-        for (const auto& entry : EmbeddedData::embedded_files) {
-            const std::string& relative_path = entry.first;
-            const unsigned char* file_data = entry.second.first;
-            size_t file_size = entry.second.second;
-
-            std::filesystem::path full_file_path = target_dir / relative_path;
-            
-            // Ensure parent directory exists for the file (redundant if directories are created first, but good for safety)
-            std::filesystem::create_directories(full_file_path.parent_path());
-
-            std::ofstream ofs(full_file_path, std::ios::binary);
-            if (!ofs.is_open()) {
-                std::cerr << "Error: Could not open file for writing: " << full_file_path << std::endl;
-                return false;
-            }
-            ofs.write(reinterpret_cast<const char*>(file_data), file_size);
-            ofs.close();
-            // std::cout << "Extracted file: " << full_file_path << " (" << file_size << " bytes)" << std::endl; // Commented out for less verbose console output
-        }
-    } catch (const std::filesystem::filesystem_error& e) {
-        std::cerr << "Filesystem error during extraction: " << e.what() << std::endl;
-        return false;
-    } catch (const std::exception& e) {
-        std::cerr << "General error during extraction: " << e.what() << std::endl;
-        return false;
-    }
-    std::cout << "Project extraction complete." << std::endl;
-    return true;
-}
 
 
 /**
@@ -301,12 +268,10 @@ private:
             // Launch the embedded calculator GUI
             try {
                 // Dynamically load the CalculatorWindow class
-                // Include the header for CalculatorWindow
-                #include "Projects/cpp/calculator/calculator_app.cpp"
-                CalculatorWindow* calc_win = new CalculatorWindow();
-                calc_win->set_transient_for(*this);
-                calc_win->show();
-                append_to_output("Calculator GUI launched.\n");
+                // CalculatorWindow* calc_win = new CalculatorWindow();
+                // calc_win->set_transient_for(*this);
+                // calc_win->show();
+                append_to_output("Calculator GUI launched. (Feature not available: source missing)\n");
             } catch (const std::exception& e) {
                 append_to_error(std::string("Error launching calculator: ") + e.what() + "\n");
             }
@@ -395,7 +360,7 @@ int main(int argc, char* argv[]) {
     std::filesystem::path base_temp_dir = std::filesystem::temp_directory_path();
     
     // Create a unique subdirectory for this application's extraction within the temp dir
-    // Using current time as part of the unique name is a common simple approach
+    // Using current time as a part of the unique name is a common simple approach
     std::string unique_subdir_name = "BareBonesApp_Projects_" + std::to_string(std::chrono::duration_cast<std::chrono::milliseconds>(
                                         std::chrono::system_clock::now().time_since_epoch()).count());
     g_extraction_target_dir = base_temp_dir / unique_subdir_name;
@@ -427,21 +392,15 @@ int main(int argc, char* argv[]) {
         }
     }
 
-    // Extract the embedded projects
-    if (!extract_embedded_projects(g_extraction_target_dir)) {
-        std::cerr << "Failed to extract embedded projects. Exiting." << std::endl;
-        return 1; // Indicate error
-    }
-
     // List of project repositories to clone (was projects.txt)
     struct ProjectRepo {
         std::string repo_url;
         std::string local_dir;
     };
     std::vector<ProjectRepo> project_repos = {
-        {"https://github.com/IEatBricks129/kerdle.git", "Projects/html/kerdle"},
-        {"https://github.com/IEatBricks129/ACEDetail.git", "Projects/html/ACEDetail"},
-        {"https://github.com/IEatBricks129/IEatBricks.git", "Projects/html/IEatBricks"}
+        {"https://github.com/IEatBricks129/kerdle.git", "html/kerdle"},
+        {"https://github.com/IEatBricks129/ACEDetail.git", "html/ACEDetail"},
+        {"https://github.com/IEatBricks129/IEatBricks.git", "html/IEatBricks"}
     };
 
     std::vector<Project> projects;
